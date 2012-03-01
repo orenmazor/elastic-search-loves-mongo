@@ -19,10 +19,8 @@ def run():
 		if operation == "i":
 			es_record = elasticsearch_api.remap(data)
 			activity_queue.append(elasticsearch_api.index(es_record))
-			print "inserting " + es_record["MID"]
 		elif operation == "d":
 			activity_queue.append(elasticsearch_api.delete(data))
-			print "deleting " + data
 	
 		#would look better with a timer object
 		if (datetime.datetime.now() - last_queue_clearing).seconds >= config["queue_purge_frequency"]:
@@ -32,5 +30,4 @@ def run():
 			activity_queue = []
 
 if __name__ == "__main__":
-	pdb.set_trace()
 	run()
