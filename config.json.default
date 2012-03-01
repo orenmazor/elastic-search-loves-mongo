@@ -1,0 +1,22 @@
+{
+   "elasticsearch":{
+      "connectionString":"",
+      "index":""
+   },
+   "types_we_care_about":[
+      "",
+      ""
+   ],
+   "oplog":{
+      "host":"",
+      "port":,
+      "db":"",
+      "collection":""
+   },
+   "data":{
+      "host":"",
+      "port":,
+      "db":""
+   },
+   "queue_purge_frequency":2
+}
