@@ -68,7 +68,7 @@ class Oplog:
 
 							#its basically impossible for there to be more than one document here. 
 							#but just in case
-							for doc in data_cursor.find(criteria):
+							for doc in docs:
 								yield ('i',doc)
 
 						elif op['op'] == 'd':
