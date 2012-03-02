@@ -1,7 +1,6 @@
 from json import dumps,loads
 from hashlib import sha224
 from datetime import datetime
-from threading import Timer
 from requests import put,get
 
 class ElasticSearch:
