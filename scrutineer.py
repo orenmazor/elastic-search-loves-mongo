@@ -5,7 +5,7 @@ from json import loads
 import pdb
 pdb.set_trace()
 
-db = Oplog().get_actual_database
+db = Oplog().get_actual_database()
 es = ElasticSearch()
 
 config = loads(open("config.json").read())
@@ -15,7 +15,7 @@ query = { "query": { "bool": { "must": [{"term":{"TY":0}}],"must_not": [ ],"shou
 #connect to your data from the ES side of things, to avoid blocking mongo.
 #we'll iterate over all of the records in ES and make sure they're up to date
 #with what is in mongo
-for record in es.scroll_search(query):
+for record in es.scroll_search(query,index=config["elasticsearch"]["index"]):
     docs = db.find({"_id":record['_source']['OID']})
     if docs.count() == 0:
         #the document exists in ES but not mongo, so we need to delete
