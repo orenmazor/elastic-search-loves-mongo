@@ -10,10 +10,8 @@ class ElasticSearch:
 	clear_queue = False
 
 	def __init__(self):
-		self.started = datetime.now()
-		config = loads(open("config.json").read())
-		self.time_to_purge_queue = Timer(config["queue_purge_frequency"],None)
-		self.time_to_purge_queue.start()
+		self.last_queue_purge = datetime.now()
+		self.config = loads(open("config.json").read())
 
 	#each document needs to have a totally unique id. if they're ever in conflict, you'll overwrite documents passively
 	def generate_document_id(self,items):
@@ -21,14 +19,14 @@ class ElasticSearch:
 
 	def index(self,document,index,doctype,bulk=True):
 		if bulk:
-			index_command = {"index":{"_index":index,"_type":doctype,"_id":self.generate_document_id([document["MID"],document["_id"]])}}
+			index_command = {"index":{"_index":index,"_type":doctype,"_id":self.generate_document_id([document["MID"],document["OID"]])}}
 			message = dumps(index_command) + "\n" + dumps(document) + "\n"
 			self.activity_queue.append(message)
 
 			#is it time to purge the queue?
-			if not self.time_to_purge_queue.isAlive():
+			if (datetime.now() - self.last_queue_purge).seconds >= self.config["queue_purge_frequency"]:
 				self.purge_queue()
-				self.time_to_purge_queue.start()
+				self.last_queue_purge = datetime.now()
 		else:
 			pass
 
@@ -38,9 +36,9 @@ class ElasticSearch:
 			self.activity_queue.append(dumps(delete_command))
 
 			#is it time to purge the queue?
-			if not self.time_to_purge_queue.isAlive():
+			if (datetime.now() - self.last_queue_purge).seconds >= self.config["queue_purge_frequency"]:
 				self.purge_queue()
-				self.time_to_purge_queue.start()
+				self.last_queue_purge = datetime.now()
 		else:
 			pass
 
@@ -69,4 +67,4 @@ class ElasticSearch:
 	def purge_queue(self):
 		message = "\n".join(self.activity_queue)
 		res = put(self.config["elasticsearch"]["connectionString"]+self.config["elasticsearch"]["index"]+"/_bulk",data=message)
-		print str(datetime.now()) + " - purged queue of " + len(self.activity_queue) + " items. ES responded with: " + str(res.status_code)
+		print str(datetime.now()) + " - purged queue of " + str(len(self.activity_queue)) + " items. ES responded with: " + str(res.status_code)
