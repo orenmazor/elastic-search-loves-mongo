@@ -2,7 +2,7 @@ import pymongo
 from pymongo.errors import AutoReconnect
 from json import loads
 import sys
-import hooks
+from hooks import mongo_delete_event,mongo_add_event
 
 class Oplog:
 
@@ -16,11 +16,11 @@ class Oplog:
             sys.exit()
 
     def start(self):
-        for op,namespace,data in self.watch_oplog(self):
+        for op,data,namespace in self.watch_oplog():
             if op == "i":
-                hooks.mongo_add_event(namespace,data)
+                mongo_add_event.add(index=self.config["elasticsearch"]["index"],doctype=namespace,data=data)
             elif op == "d":
-                hooks.mongo_delete_event(namespace,data)
+                mongo_delete_event.delete(index=self.config["elasticsearch"]["index"],doctype=namespace,documentID=data)
             
     def get_oplog_database(self):
         #open a connection to the oplog collection
