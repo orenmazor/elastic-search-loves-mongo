@@ -1,11 +1,10 @@
 from elasticsearch_api import ElasticSearch
 from json import loads
-import hooks
+from hooks import es_data_mapping
 
 es = ElasticSearch()
-config = loads(open("config.json").read())
 
-def add(namespace,data):
-    document = hooks.es_data_mapping.remap(data)
-    es.insert(document,index=config["elasticsearch"]["index"],doctype=namespace,bulk=True)
+def add(index,doctype,data):
+    document = es_data_mapping.remap(data)
+    es.index(document,index=index,doctype=doctype,bulk=True)
     

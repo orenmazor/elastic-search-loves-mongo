@@ -2,8 +2,7 @@ from elasticsearch_api import ElasticSearch
 from json import loads
 
 es = ElasticSearch()
-config = loads(open("config.json").read())
 
-def delete(namespace,documentID):
-    es.delete(documentID,index=config["elasticsearch"]["index"],doctype=namespace,bulk=True)
+def delete(index,doctype,documentID):
+    es.delete(documentID,index=index,doctype=doctype,bulk=True)
     
