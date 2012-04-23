@@ -1,10 +1,13 @@
 from json import dumps,loads
 from hashlib import sha224
 from datetime import datetime
-from requests import put,get
+from requests import post,put,get
+from time import sleep
+import zmq
+import sys
 
 class ElasticSearch:
-	#for bulk api calls, we'll queue up actions in here
+	#we keep deletes and index actions separate to control their purge frequencies
 	activity_queue = []
 	clear_queue = False
 
@@ -12,6 +15,16 @@ class ElasticSearch:
 		self.last_queue_purge = datetime.now()
 		self.config = loads(open("config.json").read())
 
+	def start(self):
+		context = zmq.Context()
+		op_queue = context.socket(zmq.PULL)
+        op_queue.connect("tcp://127.0.0.1:5555")	
+        print "started listening"
+        while True:
+			message = op_queue.recv()
+			operation = loads(message)
+			self.index(index=operation["index"],document=operation["data"],doctype=operation["doctype"],bulk=True)
+								
 	#each document needs to have a totally unique id. if they're ever in conflict, you'll overwrite documents passively
 	def generate_document_id(self,items):
 		return sha224("".join(map(str,items))).hexdigest()
@@ -23,26 +36,41 @@ class ElasticSearch:
 			self.activity_queue.append(message)
 
 			#is it time to purge the queue?
-			if (datetime.now() - self.last_queue_purge).seconds >= self.config["queue_purge_frequency"]:
+			if len(self.activity_queue) > 1000:
+			#if (datetime.now() - self.last_queue_purge).seconds >= self.config["queue_purge_frequency"]:
 				self.purge_queue()
 				self.last_queue_purge = datetime.now()
 		else:
 			pass
 
-	def delete(self,documentid,index,doctype,bulk=True):
+	def delete(self,documentID,index,doctype,bulk=True,routing=None):
 		if bulk:
-			delete_command = {"delete":{"_index":index,"_type":doctype,"_id":""}}
-			self.activity_queue.append(dumps(delete_command))
+			delete_command = {}
+			if routing == None:
+				delete_command = {"delete":{"_index":index,"_type":doctype,"_id":documentID}}
+			else:
+				delete_command = {"delete":{"_index":index,"_type":doctype,"_id":documentID,"_routing":routing}}
+
+			self.activity_queue.append(dumps(delete_command) + "\n")
 
 			#is it time to purge the queue?
-			if (datetime.now() - self.last_queue_purge).seconds >= self.config["queue_purge_frequency"]:
+			if len(self.activity_queue) >= 0:
+			#if (datetime.now() - self.last_queue_purge).seconds >= self.config["queue_purge_frequency"]:
 				self.purge_queue()
 				self.last_queue_purge = datetime.now()
 		else:
 			pass
 
+	def count_matches(self,doctype,query):
+		req = get(self.config["elasticsearch"]["connectionString"] + self.config["elasticsearch"]["index"] + "/"+doctype+"/_search",data=dumps(query))
+		if req.status_code == 200:
+			return loads(req.content)["hits"]["total"]
+		
+		return 0
+
 	def scroll_search(self,doctype,query):
-		req = get(self.config["elasticsearch"]["connectionString"]+self.config["elasticsearch"]["index"] + doctype+"/_search?search_type=scan&scroll=10m",data=dumps(query))
+		
+		req = get(self.config["elasticsearch"]["connectionString"]+self.config["elasticsearch"]["index"] +"/"+ doctype+"/_search?search_type=scan&scroll=10m",data=dumps(query))
 
 		if not req.status_code == 200:
 			raise Exception(req.content)
@@ -62,8 +90,12 @@ class ElasticSearch:
 			for esdoc in new_res['hits']['hits']:
 				yield esdoc
 
-
 	def purge_queue(self):
-		message = "\n".join(self.activity_queue)
-		res = put(self.config["elasticsearch"]["connectionString"]+self.config["elasticsearch"]["index"]+"/_bulk",data=message)
-		print str(datetime.now()) + " - purged queue of " + str(len(self.activity_queue)) + " items. ES responded with: " + str(res.status_code)
+		message = "".join(self.activity_queue)
+		#print message
+		
+		#what if ES is down? we should wait on it.
+		res = post(self.config["elasticsearch"]["connectionString"]+self.config["elasticsearch"]["index"]+"/_bulk",data=message)
+		print res.content	
+		print "purged queue of " + str(len(self.activity_queue)) + " items. ES responded with: " + str(res.status_code)
+		self.activity_queue = []

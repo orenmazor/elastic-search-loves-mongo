@@ -1,14 +1,15 @@
 import pymongo
 from pymongo.errors import AutoReconnect
-from json import loads
+from json import loads,dumps
 import sys
-from hooks import mongo_delete_event,mongo_add_event
+from hooks import es_data_mapping
+import zmq
+from time import sleep
 
 class Oplog:
 
     def __init__(self):
         self.last_record = None
-
         try:
             self.config = loads(open("config.json").read())
         except:
@@ -16,12 +17,20 @@ class Oplog:
             sys.exit()
 
     def start(self):
+        context = zmq.Context()
+        es_queue = context.socket(zmq.PUSH)
+        es_queue.bind("tcp://127.0.0.1:5555")
+        print "loading oplog...."
         for op,data,namespace in self.watch_oplog():
             if op == "i":
-                mongo_add_event.add(index=self.config["elasticsearch"]["index"],doctype=namespace,data=data)
+                document = es_data_mapping.remap(data)
+                es_queue.send(dumps({"op":"index","data":document,"index":self.config["elasticsearch"]["index"],"doctype":namespace}))
             elif op == "d":
-                mongo_delete_event.delete(index=self.config["elasticsearch"]["index"],doctype=namespace,documentID=data)
-            
+                #dont do this for now
+                pass
+                #self.es_queue.send(dumps({"op":"delete","data":document,"index":self.config["elasticsearch"]["index"],"doctype":namespace}))
+                #mongo_delete_event.delete(index=self.config["elasticsearch"]["index"],doctype=namespace,documentID=data)
+
     def get_oplog_database(self):
         #open a connection to the oplog collection
         try:
